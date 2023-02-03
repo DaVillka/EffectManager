@@ -2,8 +2,11 @@
 
 namespace HardLife.Core.Effects
 {
+    //Duration 10000 означает что эффект будет длится 10 секунд
+    //IsDublicable true значит что его можно наложить несколько раз
+    //UpdateRate 1000 значит что функция Update будет вызыватся каждую секунду на протяжении Duration(10 сек)
     [Effect(Id = 0, Name = "Heal", Duration = 10000, UpdateRate = 1000, IsDublicable = true)]
-    public class HealEffect : Effect
+    public class FoodHealEffect : Effect
     {
         public override bool Set(Player player)
         {
@@ -14,6 +17,8 @@ namespace HardLife.Core.Effects
         {
             Console.WriteLine($"End effect: {Name}");
         }
+        //Если вернуть false, то еффект прекратит действовать
+        //в данной функции false возвращается когда hp игрока полное
         public override bool Update(Player player)
         {
             bool status = true;
