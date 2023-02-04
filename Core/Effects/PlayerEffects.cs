@@ -37,7 +37,7 @@ namespace HardLife.Core.Effects
         }
         public void CancelAllEffect()
         {
-            foreach (var item in playerEffectDatas) { item.IsForciblyCandel = true; item.CancelToken?.Cancel(); }
+            foreach (var item in playerEffectDatas) { item.IsForciblyCancel = true; item.CancelToken?.Cancel(); }
         }
         public string GetSerealizeEffects()
         {

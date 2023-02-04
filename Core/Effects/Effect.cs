@@ -62,7 +62,7 @@ namespace HardLife.Core.Effects
             //иначе создаем таск
             await CreateUpdateTask(player, playerEffects, playerEffectData);
             //Если ивент завершился принудительно ничего не далем, инаце ↓
-            if (!playerEffectData.IsForciblyCandel)
+            if (!playerEffectData.IsForciblyCancel)
             {
                 End(player);
                 //сообщаем на клиент чт оивента завершился

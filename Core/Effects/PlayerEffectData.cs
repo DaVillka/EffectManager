@@ -35,7 +35,7 @@
         public int Id { get; set; }//айди эффекта
         public Effect Effect { get; set; }//Сам эффект
         public int LeftTime { get; set; }//сколько времени осталось действовать
-        public bool IsForciblyCandel { get; set; } = false;//Флаг, о принудительной остановке
+        public bool IsForciblyCancel { get; set; } = false;//Флаг, о принудительной остановке
         public CancellationTokenSource CancelToken { get; set; }//Токен для отмены таска
     }
 }
