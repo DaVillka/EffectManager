@@ -25,15 +25,34 @@ namespace HardLife.Instances
         private string testSaveData;
         public void Initialize()
         {
-            var types = Assembly.GetExecutingAssembly().GetTypes().Where(t => t.IsSubclassOf(typeof(Effect)));
+            var types = Assembly.GetExecutingAssembly().GetTypes().Where(t => t.IsDefined(typeof(EffectAttribute)));
             foreach (var t in types)
                 Activator.CreateInstance(t);
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine($"[EFFECT] Realized {effects.Count} effects.");
             Console.ResetColor();
+
+            Player player = new Player(new NetHandle());
+            player.Name = "Test";
+            player.Health = 50;
+            OnPlayerSpawn(player);
+            OnSetEffect(player, 0);
+            //OnSetEffect(player, 0);
+
+            Task.Run(async () =>
+            {
+                await Task.Delay(3000);
+                OnCancelEffect(player, 0);
+            });
+
         }
         /********************* Серверны ивенты ***********************/
+        [ServerEvent(Event.ResourceStart)]
+        public void OnResourceStart()
+        {
+            Initialize();
+        }
         //При спавне выделяем персонажу клас управления ефектами персонажа
         [ServerEvent(Event.PlayerSpawn)]
         public void OnPlayerSpawn(Player player)

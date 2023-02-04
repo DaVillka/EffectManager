@@ -3,29 +3,23 @@
 namespace HardLife.Core.Effects
 {
     //Duration 10000 означает что эффект будет длится 10 секунд
-    //IsDublicable false значит что его нельзя наложить несколько раз
+    //IsDublicable true значит что его можно наложить несколько раз
     //UpdateRate 1000 значит что функция Update будет вызыватся каждую секунду на протяжении Duration(10 сек)
-    [Effect(Id = 0, Name = "Heal", Duration = 10000, UpdateRate = 1000, IsDublicable = false)]
+    [Effect(Id = 0, Name = "Heal", Duration = 10000, UpdateRate = 1000, IsDublicable = true, IsCancelable = true)]
     public class FoodHealEffect : Effect
     {
-        //Вызывается при наложении эффекта
-        //возвращает bool, наложение эффекта можно отменить вернув false
-        //так как на пример нету смысла накладывать эффект восстановления хп
-        //если хп полное
-        public override bool Set(Player player)
+        protected override bool Set(Player player)
         {
-            Console.WriteLine($"Sets effect: {Name}");
-            if(player.Health >= 100) return false;
+            Console.WriteLine($"Sets effect: Heal");
             return true;
         }
-        //Вызывается при завершении работы эффекта
-        public override void End(Player player)
+        protected override void End(Player player)
         {
-            Console.WriteLine($"End effect: {Name}");
+            Console.WriteLine($"End effect: Heal2");
         }
         //Если вернуть false, то еффект прекратит действовать
         //в данной функции false возвращается когда hp игрока полное
-        public override bool Update(Player player)
+        protected override bool Update(Player player)
         {
             bool status = true;
             if (player.Health + 3 > 100) { player.Health = 100; status = false; }

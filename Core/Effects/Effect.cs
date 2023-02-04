@@ -7,119 +7,80 @@ namespace HardLife.Core.Effects
 {
     //Основной класс еффекта, отвечает за
     //манипуляции с еффектом
-    public abstract class Effect : IEffectConfig
+    public abstract class Effect
     {
-        public int Id { get; set; } = 0;
-        public string Name { get; set; } = string.Empty;
-        public int Duration { get; set; } = -1;
-        public uint UpdateRate { get; set; } = 1000;
-        public bool IsDublicable { get; set; } = false;
-        public bool IsCancelable { get; set; } = false;
-        public bool IsUpdatable { get; set; } = true;
-
+        public int Id { get => effectAttribute.Id; }
+        public string Name { get => effectAttribute.Name; }
+        public int Duration { get => effectAttribute.Duration; }
+        private EffectAttribute effectAttribute = null;
         private const int _clientValidation = 2;
         public Effect()
         {
-            var attr = (EffectAttribute)GetType().GetCustomAttribute(typeof(EffectAttribute), false);
-            if (attr == null)
+            effectAttribute = (EffectAttribute)GetType().GetCustomAttribute(typeof(EffectAttribute), false);
+            if (effectAttribute == null)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"[ERROR EFFECT] '{GetType().Name}' does not inherit attribute.");
                 Console.ResetColor();
                 return;
             }
-            Id = attr.Id;
-            Name = attr.Name;
-            Duration = attr.Duration;
-            UpdateRate = attr.UpdateRate;
-            IsDublicable = attr.IsDublicable;
-            IsCancelable = attr.IsCancelable;
-            IsUpdatable = attr.IsUpdatable;
+            if(effectAttribute.IsDublicable && effectAttribute.IsUpdatable)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[ERROR EFFECT] '{GetType().Name}' IsDublicable and IsUpdatable shouldn't be `true` at the same time.");
+                Console.ResetColor();
+                return;
+            }
 
             EffectManager.Instance.AddEffect(this);
         }
         //Перегрезка lastLeftTime отвечает за установку конкретного времени до конца выполнения, -1 значит не используется
         public async Task ValidateSet(Player player, PlayerEffects playerEffects, int lastLeftTime = -1)
         {
-            //Первым делом мы проверяем наложен ли данный эффект на игрока
-            PlayerEffectData effectData = playerEffects.GetEffectDataFromId(Id);
-            //эффект есть
-            if (effectData != null && !IsDublicable)
-            {
-                if (IsUpdatable)
-                    effectData.CancelToken.CancelAfter(TimeSpan.FromMilliseconds(Duration));
+            PlayerEffectData effectData = playerEffects.GetEffectDataFromId(effectAttribute.Id);
+
+            //IsUpdatable и IsDublicable не могут быть true одновременно, иначе этот код не будет выполнен вообще
+            if (effectData != null) {
+                if (effectAttribute.IsUpdatable)
+                    effectData.CancelToken.CancelAfter(TimeSpan.FromMilliseconds(effectAttribute.Duration));
+                if (effectAttribute.IsDublicable == false)
+                    return;
             }
-            //эффекта нет или он может дублироваться, накладываем новый
-            else
-            {
-                //Проверяем, проходит ли по условиям сам эффект
-                //на пример, нет смысла накладывать эффект на восстановление хп если хп полное
-                if (!Set(player)) return;
-                PlayerEffectData playerEffectData = new PlayerEffectData();
-                CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-                playerEffectData.Id = Id;
-                playerEffectData.Effect = this;
-                playerEffectData.LeftTime = lastLeftTime == -1 ? Duration : lastLeftTime;
-                playerEffectData.CancelToken = cancellationTokenSource;
-                playerEffects.Add(playerEffectData);
-                //Если Duration больше 0 то устанавливаем таймер на отмену
-                if (Duration > 0) cancellationTokenSource.CancelAfter(TimeSpan.FromMilliseconds(playerEffectData.LeftTime));
-                //Если Duration меньше 0, то еффект добавляется, но таск не накладывается
-                //Можно использовать в каких то пассивных эффектах
-                //которые что то дают при активации
-                if (Duration < 0) return;
-                //Если Duration равно 0 то таск работает бессконечно, пока не отменишь
-                await Task.Factory.StartNew(async () =>
-                {
-                    try
-                    {
-                        var dfrom = DateTime.Now;
-                        while (!cancellationTokenSource.IsCancellationRequested)
-                        {
-                            //каждые `_clientValidation` отправляем игроку данные о состоянии эффекта
-                            //при условии что работает таск
-                            //ВАЖНО: Работает синхронно с таском, время указывается в секундах
-                            //нужно для того что бы валидация с клиентом не флудила ивентами
-                            //если UpdateRate допустим 100 миллисек.
-                            //но если UpdateRate больше _clientValidation то валидация будет происходить по UpdateRate
-                            if ((DateTime.Now - dfrom).Seconds > _clientValidation)
-                            {
-                                ValidateUpdate(player, playerEffects);
-                                dfrom = DateTime.Now;
-                            }
-                            if (!Update(player)) cancellationTokenSource.Cancel();
-                            playerEffectData.LeftTime -= (int)UpdateRate;
-                            await Task.Delay(TimeSpan.FromMilliseconds(UpdateRate));
-                        }
-                        //Если ивент завершился принудительно ничего не далем, инаце ↓
-                        if (!playerEffectData.IsForciblyCandel)
-                        {
-                            End(player);
-                            //сообщаем на клиент чт оивента завершился
-                            //playerTriggerEvent("effectEnd", Id, playerEffects.GetEffectIndexFromData(effectData));
-                        }
-                        //удаляем эффект из списка эффектов игрока
-                        playerEffects.Destroy(playerEffectData);
-                    }
-                    catch (Exception e)
-                    {
-                        Console.WriteLine(e);
-                    }
-                }, cancellationTokenSource.Token);
-            }
+            //Проверяем, проходит ли по условиям сам эффект
+            //на пример, нет смысла накладывать эффект на восстановление хп если хп полное
+            if (!Set(player)) return;
+            //Накладываем на игрока эффект
+            PlayerEffectData playerEffectData = CreateEffect(playerEffects, (lastLeftTime == -1 ? effectAttribute.Duration : lastLeftTime));
             //при инициализации эффекта передаем его айди, общее время выполнения, и оставшееся время
             //player.TriggerEvent("effectSet", Id, Duration, playerEffectData.LeftTime);
+
+            //Duration == -1 то таск не создается
+            if (effectAttribute.Duration == -1) return;
+
+            //Если Duration больше 0 то устанавливаем таймер на отмену
+            if (effectAttribute.Duration > 0) playerEffectData.CancelToken.CancelAfter(TimeSpan.FromMilliseconds(playerEffectData.LeftTime));
+            //иначе создаем таск
+            await CreateUpdateTask(player, playerEffects, playerEffectData);
+            //Если ивент завершился принудительно ничего не далем, инаце ↓
+            if (!playerEffectData.IsForciblyCandel)
+            {
+                End(player);
+                //сообщаем на клиент чт оивента завершился
+                //playerTriggerEvent("effectEnd", Id, playerEffects.GetEffectIndexFromData(effectData));
+            }
+            //удаляем эффект из списка эффектов игрока
+            playerEffects.Destroy(playerEffectData);
+            
         }
         public void ValidateEnd(Player player, PlayerEffects playerEffects)
         {
             //Проверяем, можно ли удаленно отменить эффект
-            if (!IsCancelable) return;
-            PlayerEffectData effectData = playerEffects.GetEffectDataFromId(Id);
+            if (!effectAttribute.IsCancelable) return;
+            PlayerEffectData effectData = playerEffects.GetEffectDataFromId(effectAttribute.Id);
             //Если данный эффект наложен 
             if (effectData != null)
             {
                 effectData.CancelToken.Cancel();
-                End(player);
                 //отправляем  инфу на клиент что такой то эффект завершился
                 //player.TriggerEvent("effectCancel", playerEffects.GetEffectIndexFromData(effectData));
             }
@@ -130,8 +91,50 @@ namespace HardLife.Core.Effects
             //PlayerEffectData effectData = playerEffects.GetEffectDataFromId(Id);
             //player.TriggerEvent("effectUpdate", playerEffects.GetEffectIndexFromData(effectData), effectData.LeftTime);
         }
-        public abstract bool Set(Player player);
-        public abstract bool Update(Player player);
-        public abstract void End(Player player);
+
+        private PlayerEffectData CreateEffect(PlayerEffects playerEffects, int duration)
+        {
+            PlayerEffectData playerEffectData = new PlayerEffectData();
+            CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
+            playerEffectData.Id = effectAttribute.Id;
+            playerEffectData.Effect = this;
+            playerEffectData.LeftTime = duration;
+            playerEffectData.CancelToken = cancellationTokenSource;
+            playerEffects.Add(playerEffectData);
+            return playerEffectData;
+        }
+        private async Task CreateUpdateTask(Player player, PlayerEffects playerEffects, PlayerEffectData playerEffectData)
+        {
+            await Task.Run(() =>
+            {
+                try
+                {
+                    var dfrom = DateTime.Now;
+                    while (!playerEffectData.CancelToken.IsCancellationRequested)
+                    {
+                        //каждые `_clientValidation` отправляем игроку данные о состоянии эффекта
+                        //при условии что работает таск
+                        //ВАЖНО: Работает синхронно с таском, время указывается в секундах
+                        //нужно для того что бы валидация с клиентом не флудила ивентами
+                        //если UpdateRate допустим 100 миллисек.
+                        //но если UpdateRate больше _clientValidation то валидация будет происходить по UpdateRate
+                        if ((DateTime.Now - dfrom).Seconds > _clientValidation)
+                        {
+                            ValidateUpdate(player, playerEffects);
+                            dfrom = DateTime.Now;
+                        }
+                        if (!Update(player)) playerEffectData.CancelToken.Cancel();
+                        playerEffectData.LeftTime -= (int)effectAttribute.UpdateRate;
+                        //Task.Delay(TimeSpan.FromMilliseconds(effectAttribute.UpdateRate));
+                        Thread.Sleep(TimeSpan.FromMilliseconds(effectAttribute.UpdateRate));
+                    }
+                }
+                catch (Exception e) { Console.WriteLine(e); }
+                
+            }, playerEffectData.CancelToken.Token);
+        }
+        protected abstract bool Set(Player player);
+        protected abstract bool Update(Player player);
+        protected abstract void End(Player player);
     }
 }
