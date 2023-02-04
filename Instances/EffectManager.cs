@@ -25,7 +25,7 @@ namespace HardLife.Instances
         private string testSaveData;
         public void Initialize()
         {
-            var types = Assembly.GetExecutingAssembly().GetTypes().Where(t => t.IsDefined(typeof(EffectAttribute)));
+            var types = Assembly.GetExecutingAssembly().GetTypes().Where(t => t.IsSubclassOf(typeof(Effect)));
             foreach (var t in types)
                 Activator.CreateInstance(t);
 
