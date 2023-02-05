@@ -7,58 +7,45 @@ namespace HardLife.Core.Effects
 {
     //Основной класс еффекта, отвечает за
     //манипуляции с еффектом
-    public abstract class Effect
+    public abstract class Effect : EffectAttribute
     {
-        public int Id { get => effectAttribute.Id; }
-        public string Name { get => effectAttribute.Name; }
-        public int Duration { get => effectAttribute.Duration; }
-        private EffectAttribute effectAttribute = null;
         private const int _clientValidation = 2;
-        public Effect()
+        public bool Initialize()
         {
-            effectAttribute = (EffectAttribute)GetType().GetCustomAttribute(typeof(EffectAttribute), false);
-            if (effectAttribute == null)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"[ERROR EFFECT] '{GetType().Name}' does not inherit attribute.");
-                Console.ResetColor();
-                return;
-            }
-            if(effectAttribute.IsDublicable && effectAttribute.IsUpdatable)
+            if (IsDublicable && IsUpdatable)
             {
                 Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine($"[ERROR EFFECT] '{GetType().Name}' IsDublicable and IsUpdatable shouldn't be `true` at the same time.");
                 Console.ResetColor();
-                return;
+                return false;
             }
-
-            EffectManager.Instance.AddEffect(this);
+            return true;
         }
         //Перегрезка lastLeftTime отвечает за установку конкретного времени до конца выполнения, -1 значит не используется
         public async Task ValidateSet(Player player, PlayerEffects playerEffects, int lastLeftTime = -1)
         {
-            PlayerEffectData effectData = playerEffects.GetEffectDataFromId(effectAttribute.Id);
+            PlayerEffectData effectData = playerEffects.GetEffectDataFromId(Id);
 
             //IsUpdatable и IsDublicable не могут быть true одновременно, иначе этот код не будет выполнен вообще
             if (effectData != null) {
-                if (effectAttribute.IsUpdatable)
-                    effectData.CancelToken.CancelAfter(TimeSpan.FromMilliseconds(effectAttribute.Duration));
-                if (effectAttribute.IsDublicable == false)
+                if (IsUpdatable)
+                    effectData.CancelToken.CancelAfter(TimeSpan.FromMilliseconds(Duration));
+                if (IsDublicable == false)
                     return;
             }
             //Проверяем, проходит ли по условиям сам эффект
             //на пример, нет смысла накладывать эффект на восстановление хп если хп полное
             if (!Set(player)) return;
             //Накладываем на игрока эффект
-            PlayerEffectData playerEffectData = CreateEffect(playerEffects, (lastLeftTime == -1 ? effectAttribute.Duration : lastLeftTime));
+            PlayerEffectData playerEffectData = CreateEffect(playerEffects, (lastLeftTime == -1 ? Duration : lastLeftTime));
             //при инициализации эффекта передаем его айди, общее время выполнения, и оставшееся время
             //player.TriggerEvent("effectSet", Id, Duration, playerEffectData.LeftTime);
 
             //Duration == -1 то таск не создается
-            if (effectAttribute.Duration == -1) return;
+            if (Duration == -1) return;
 
             //Если Duration больше 0 то устанавливаем таймер на отмену
-            if (effectAttribute.Duration > 0) playerEffectData.CancelToken.CancelAfter(TimeSpan.FromMilliseconds(playerEffectData.LeftTime));
+            if (Duration > 0) playerEffectData.CancelToken.CancelAfter(TimeSpan.FromMilliseconds(playerEffectData.LeftTime));
             //иначе создаем таск
             await CreateUpdateTask(player, playerEffects, playerEffectData);
             //Если ивент завершился принудительно ничего не далем, инаце ↓
@@ -75,8 +62,8 @@ namespace HardLife.Core.Effects
         public void ValidateEnd(Player player, PlayerEffects playerEffects)
         {
             //Проверяем, можно ли удаленно отменить эффект
-            if (!effectAttribute.IsCancelable) return;
-            PlayerEffectData effectData = playerEffects.GetEffectDataFromId(effectAttribute.Id);
+            if (!IsCancelable) return;
+            PlayerEffectData effectData = playerEffects.GetEffectDataFromId(Id);
             //Если данный эффект наложен 
             if (effectData != null)
             {
@@ -96,7 +83,7 @@ namespace HardLife.Core.Effects
         {
             PlayerEffectData playerEffectData = new PlayerEffectData();
             CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
-            playerEffectData.Id = effectAttribute.Id;
+            playerEffectData.Id = Id;
             playerEffectData.Effect = this;
             playerEffectData.LeftTime = duration;
             playerEffectData.CancelToken = cancellationTokenSource;
@@ -124,9 +111,9 @@ namespace HardLife.Core.Effects
                             dfrom = DateTime.Now;
                         }
                         if (!Update(player)) playerEffectData.CancelToken.Cancel();
-                        playerEffectData.LeftTime -= (int)effectAttribute.UpdateRate;
+                        playerEffectData.LeftTime -= (int)UpdateRate;
                         //Task.Delay(TimeSpan.FromMilliseconds(effectAttribute.UpdateRate));
-                        Thread.Sleep(TimeSpan.FromMilliseconds(effectAttribute.UpdateRate));
+                        Thread.Sleep(TimeSpan.FromMilliseconds(UpdateRate));
                     }
                 }
                 catch (Exception e) { Console.WriteLine(e); }

@@ -25,9 +25,51 @@ namespace HardLife.Instances
         private string testSaveData;
         public void Initialize()
         {
+            //Полчучаем все классы которые унаследованы от Effect
             var types = Assembly.GetExecutingAssembly().GetTypes().Where(t => t.IsSubclassOf(typeof(Effect)));
             foreach (var t in types)
-                Activator.CreateInstance(t);
+            {
+                //Ищем в них отаттрибученые параметры
+                var effectAttribute = (EffectAttribute)t.GetCustomAttribute(typeof(EffectAttribute), false);
+                //если атрибута нету то выкидываешь ошибку
+                if (effectAttribute == null)
+                {
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"[ERROR EFFECT] '{GetType().Name}' does not inherit attribute.");
+                    Console.ResetColor();
+                    return;
+                }
+                try
+                {
+                    //создаем экземпляр эффекта
+                    var instance = (Effect)Activator.CreateInstance(t);
+
+                    //Копируем в него сеттеры из атрибута
+                    var sourceProps = effectAttribute.GetType().GetProperties()
+                    .Where(x => x.CanRead && x.CanWrite)
+                    .ToList();
+                    var destProps = instance.GetType().GetProperties()
+                            .Where(x => x.CanRead && x.CanWrite)
+                            .ToList();
+                    foreach (var sourceProp in sourceProps)
+                    {
+                        if (destProps.Any(x => x.Name == sourceProp.Name))
+                        {
+                            var p = destProps.First(x => x.Name == sourceProp.Name);
+                            p.SetValue(instance, sourceProp.GetValue(effectAttribute, null), null);
+                        }
+                    }
+                    if(instance.Initialize())
+                        EffectManager.Instance.AddEffect(instance);
+                }
+                catch(Exception e)
+                {
+                   
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine(e);
+                    Console.ResetColor();
+                }
+            }
 
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine($"[EFFECT] Realized {effects.Count} effects.");
@@ -45,7 +87,17 @@ namespace HardLife.Instances
                 await Task.Delay(3000);
                 OnCancelEffect(player, 0);
             });
-
+        }
+        private void AddEffect(Effect effect)
+        {
+            if (effects.TryGetValue(effect.Id, out var thisEffect) && thisEffect != null)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine($"[ERROR EFFECT] '{effect.GetType().Name}' An effect with the same ID already exists.");
+                Console.ResetColor();
+                return;
+            }
+            effects.Add(effect.Id, effect);
         }
         /********************* Серверны ивенты ***********************/
         [ServerEvent(Event.ResourceStart)]
@@ -87,17 +139,6 @@ namespace HardLife.Instances
             }
         }
         /*********************** Клиентские ивенты ***********************/
-        public void AddEffect(Effect effect)
-        {
-            if (effects.TryGetValue(effect.Id, out var thisEffect) && thisEffect != null)
-            {
-                Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine($"[ERROR EFFECT] '{effect.GetType().Name}' An effect with the same ID already exists.");
-                Console.ResetColor();
-                return;
-            }
-            effects.Add(effect.Id, effect);
-        }
         //Внешний ивент, добавление ефекта игроку
         public void OnSetEffect(Player player, int id)
         {
